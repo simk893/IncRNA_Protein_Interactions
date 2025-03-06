@@ -1,0 +1,53 @@
+import pandas as pd
+from scipy.stats import skew, kurtosis
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+file_path = r"C:\Users\simeo\OneDrive\Documents\UNC\Spring 2025\STOR 765\Data for Simeon\ENST00000429829.6_predictions.tsv"
+df = pd.read_csv(file_path, sep='\t')
+df.head()
+
+# Variables for percentiles, max-min, mean, variance, skew, and kurtosis
+proteins = ['HNRNPC', 'HNRNPK', 'HNRNPM', 'MATR3', 'PTBP1', 'SRSF1', 'TIA1']
+proportions, max_min, means, variances, skews, kurtoses = {}, {}, {}, {}, {}, {}
+
+# Summary Statistic Feature Extraction
+N = 20
+for protein in proteins:
+    df[f'{protein}_percentile'] = pd.cut(df[protein], bins=[i/N for i in range(N+1)], labels=False, include_lowest=True)
+    for i in range(N):
+        percentile_data = df[df[f'{protein}_percentile'] == i][protein] - (i / N)
+        proportions[f'{protein}_percentile{i}'] = percentile_data.shape[0] / df.shape[0]
+        max_min[f'{protein}_percentile{i}_max_min'] = percentile_data.max() - percentile_data.min()
+        means[f'{protein}_percentile{i}_mean'] = percentile_data.mean()
+        variances[f'{protein}_percentile{i}_variance'] = percentile_data.var()
+        skews[f'{protein}_percentile{i}_skew'] = skew(percentile_data)
+        kurtoses[f'{protein}_percentile{i}_kurtosis'] = kurtosis(percentile_data)
+
+# Summary Statistics Dataframe
+data = {'Protein': proteins}
+for i in range(N):
+    lower_bound = i / N
+    upper_bound = (i + 1) / N
+    data[f'({lower_bound:.2f}-{upper_bound:.2f})_Proportion'] = [proportions[f'{protein}_percentile{i}'] for protein in proteins]
+    data[f'({lower_bound:.2f}-{upper_bound:.2f})_Max_Min'] = [max_min[f'{protein}_percentile{i}_max_min'] for protein in proteins]
+    data[f'({lower_bound:.2f}-{upper_bound:.2f})_Mean'] = [means[f'{protein}_percentile{i}_mean'] for protein in proteins]
+    data[f'({lower_bound:.2f}-{upper_bound:.2f})_Variance'] = [variances[f'{protein}_percentile{i}_variance'] for protein in proteins]
+    data[f'({lower_bound:.2f}-{upper_bound:.2f})_Skew'] = [skews[f'{protein}_percentile{i}_skew'] for protein in proteins]
+    data[f'({lower_bound:.2f}-{upper_bound:.2f})_Kurtosis'] = [kurtoses[f'{protein}_percentile{i}_kurtosis'] for protein in proteins]
+result_df = pd.DataFrame(data).fillna(0)
+result_df
+
+# Auto-correlation Matrices per Lag
+lags = [0, 1, 2, 3]
+fig, axes = plt.subplots(1, len(lags), figsize=(20, 5))
+for idx, L in enumerate(lags):
+    autocorrelation_matrix = pd.DataFrame(index=proteins, columns=proteins)
+    for protein1 in proteins:
+        for protein2 in proteins:
+            autocorrelation_matrix.loc[protein1, protein2] = df[protein1].corr(df[protein2].shift(L))
+    autocorrelation_matrix = autocorrelation_matrix.astype(float).round(3)
+    sns.heatmap(autocorrelation_matrix, annot=True, cmap='coolwarm', fmt='.3f', ax=axes[idx])
+    axes[idx].set_title(f'Autocorrelation Matrix for Lag = {L}')
+plt.tight_layout()
+plt.show()
